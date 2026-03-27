@@ -1,7 +1,7 @@
 import flet as ft
 from typing import Any
 
-from app.services.transacciones_api_productos import (
+from app.service.transacciones_api_productos import (
     list_products,
     get_product,
     create_product,

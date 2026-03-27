@@ -1,5 +1,5 @@
 import flet as ft
-from app.views.mostrar_productos import products_view
+from app.views.mostrar_productos_httpx import  products_view
 
 def main(page: ft.Page):
     page.title = "Aplicación con estilos"
@@ -7,4 +7,4 @@ def main(page: ft.Page):
     page.add(products_view(page))
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
