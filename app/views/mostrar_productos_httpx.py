@@ -1,30 +1,52 @@
 import flet as ft
+from typing import Any
+
 from app.service.transacciones_api_productos import (
+    list_products,
+    get_product,
     create_product,
     update_product,
-    list_products as listar_productos
+    delete_product
 )
-from app.views.nuevo_editar import formulario_nuevo_editar_producto
-from app.components.popup import show_popup, show_snackbar
-import app.service.transacciones_api_productos as api_service
+
+from app.components.popup import (
+    show_popup,
+    show_snackbar,
+)
+
+from app.components.error import ApiError, api_error_to_text
 from app.styles.estilos import Colors
 
 def products_view(page: ft.Page) -> ft.Control:
-    tabla = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Nombre")),
-            ft.DataColumn(ft.Text("Cantidad")),
-            ft.DataColumn(ft.Text("Ingreso")),
-            ft.DataColumn(ft.Text("Min")),
-            ft.DataColumn(ft.Text("Max")),
-            ft.DataColumn(ft.Text("Acciones")),
-        ],
-        rows=[]
+
+    # Contador total
+    total_text = ft.Text(
+        "Total de productos: (cargando...)",
+        size=18
     )
+
+    # Columnas
+    columnas = [
+        ft.DataColumn(label=ft.Text("Nombre")),
+        ft.DataColumn(label=ft.Text("Cantidad")),
+        ft.DataColumn(label=ft.Text("Ingreso")),
+        ft.DataColumn(label=ft.Text("Min")),
+        ft.DataColumn(label=ft.Text("Max")),
+        ft.DataColumn(label=ft.Text("Acciones")),
+    ]
+
+    tabla = ft.DataTable(
+        columns=columnas,
+        rows=[],
+        width=900,
+    )
+
     async def actualizar_data():
         try:
-            data = listar_productos(limit=500, offset=0)
+            data = list_products(limit=500, offset=0)
+            total_text.value = "Total de productos: " + str(data.get("total", 0))
             items = data.get("items", [])
+
             nuevas_filas = []
             for p in items:
                 nuevas_filas.append(
@@ -37,90 +59,82 @@ def products_view(page: ft.Page) -> ft.Control:
                         ft.DataCell(
                             ft.Row(
                                 controls=[
-                                    ft.IconButton(icon=ft.icons.EDIT, tooltip="Editar", on_click=lambda e, p=p: inicio_editar_producto(p)),
+                                    ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", on_click=lambda e, p=p: inicio_editar_producto(p)),
+                                    # ft.IconButton(icon=ft.Icons.DELETE, tooltip="Borrar", on_click=lambda e, p=p: inicio_borrar_producto(p))
                                 ]
                             )
-                        ),
+                        )
                     ])
                 )
             tabla.rows = nuevas_filas
             page.update()
         except Exception as e:
             page.update()
-    def abrir_formulario(producto_existente=None):
-        async def procesar_datos(data_capturada: dict):
+
+    async def formulario_nuevo(producto_existente=None):
+        async def procesar_datos(data):
             try:
-                if "id" in data_capturada:
-                    product_id = data_capturada["id"]
-                    data_sin_id = data_capturada.copy()
+                if "id" in data:
+                    product_id = data["id"]
+                    data_sin_id = data.copy()
                     del data_sin_id["id"]
                     update_product(product_id, data_sin_id)
                     await show_snackbar(page, "Éxito", "Producto actualizado.", bgcolor=Colors.SUCCESS)
                 else:
-                    create_product(data_capturada)
+                    create_product(data)
                     await show_snackbar(page, "Éxito", "Producto creado.", bgcolor=Colors.SUCCESS)
                 await actualizar_data()
             except Exception as ex:
                 await show_popup(page, "Error", str(ex))
+
         dlg, open_form, _ = formulario_nuevo_editar_producto(
-            page,
-            on_submit=procesar_datos,
-            initial=producto_existente
+            page, on_submit=procesar_datos, initial=producto_existente
         )
         open_form()
-    def inicio_editar_producto(p: dict):
+
+    ########## Editar producto ##########
+    # Esta función se ejecuta al hacer click en el icono "editar"
+    def inicio_editar_producto(p: dict[str, Any]):
         async def editar_producto(data: dict):
             try:
-                data_sin_id = data.copy()
-                if "id" in data_sin_id:
-                    del data_sin_id["id"]
-                update_product(p["id"], data_sin_id)
-                close_()
+                await update_product(p["id"], data)
+                close()
                 await show_snackbar(page, "Éxito", "Producto actualizado", bgcolor=Colors.SUCCESS)
                 await actualizar_data()
+            except ApiError as ex:
+                await show_popup(page, "Error", api_error_to_text(ex))
             except Exception as ex:
                 await show_snackbar(page, "Error", str(ex), bgcolor=Colors.DANGER)
-        dlg, open_, close_ = formulario_nuevo_editar_producto(page, on_submit=editar_producto, initial=p)
+
+        # dlg: dialogo, open_: función para abrir, close: función para cerrar
+        dlg, open_, close = formulario_nuevo_editar_producto(page, on_submit=editar_producto, initial=p)
         open_()
-    def toggle_mock(e):
-        api_service.MOCK_MODE = not api_service.MOCK_MODE
-        page.snack_bar = ft.SnackBar(
-            content=ft.Text(f"Modo API: {'Mock ✅' if api_service.MOCK_MODE else 'Real 🔌'}"),
-            bgcolor=Colors.INFO
-        )
-        page.snack_bar.open = True
-        page.update()
-        page.run_task(actualizar_data())
+
     btn_nuevo = ft.FilledButton(
         "Nuevo producto",
-        icon=ft.icons.ADD,
-        on_click=lambda e: abrir_formulario()
+        icon=ft.Icons.ADD,
+        on_click=lambda e: formulario_nuevo()
     )
+
     page.run_task(actualizar_data)
+
     return ft.Column(
         expand=True,
         controls=[
             ft.Row(
-                [
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                controls=[
                     ft.Text("Inventario", size=25, weight="bold"),
-                    ft.IconButton(
-                        icon=ft.icons.SCIENCE if api_service.MOCK_MODE else ft.icons.STORAGE,
-                        tooltip="Toggle Mock/Real API",
-                        on_click=lambda e: toggle_mock(e)
-                    ),
+                    total_text,
                     btn_nuevo
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ]
             ),
             ft.Divider(),
             ft.Container(
-                content=ft.Container(
-                    content=tabla,
-                    padding=10,
-                    alignment=ft.alignment.center
-                ),
+                content=tabla,
+                padding=10,
                 alignment=ft.alignment.center,
-                expand=True
+                expand=True,
             )
         ]
     )
