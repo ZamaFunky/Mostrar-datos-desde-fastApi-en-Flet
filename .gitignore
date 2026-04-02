@@ -1,13 +1,1 @@
-__pycache__/
-*.pyc
-venv/
-.venv/
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-.coverage
-htmlcov/
-*.log
-.DS_Store
-Thumbs.db
+.venv/\n__pycache__/\n*.pyc\nvenv/\n
